@@ -39,9 +39,9 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import { db } from '../firebase';
-import { collection, query, orderBy, limit, getDocs, onSnapshot } from 'firebase/firestore';
+import { collection, query, orderBy, limit, getDocs } from 'firebase/firestore';
 import { Chart, registerables } from 'chart.js';
 
 Chart.register(...registerables);
@@ -49,7 +49,6 @@ Chart.register(...registerables);
 const loading = ref(true);
 const chartData = ref([]);
 let altitudeChart = null;
-let unsubscribe = null;
 
 // Props - make it flexible
 const props = defineProps({
@@ -80,13 +79,13 @@ const avgAlt = computed(() => {
   return sum / chartData.value.length;
 });
 
-// Load initial data
+// Load data
 async function loadChartData() {
   loading.value = true;
   
   const q = query(
     collection(db, 'iss_location'),
-    orderBy('createdAt', 'asc'),
+    orderBy('createdAt', 'asc'),  // Oldest first for chronological chart
     limit(props.dataLimit)
   );
   
@@ -106,41 +105,6 @@ async function loadChartData() {
   loading.value = false;
   
   console.log(`📈 Loaded ${chartData.value.length} points for chart`);
-}
-
-// Setup real-time listener
-function setupRealTimeUpdates() {
-  const q = query(
-    collection(db, 'iss_location'),
-    orderBy('createdAt', 'desc'),
-    limit(1)
-  );
-  
-  unsubscribe = onSnapshot(q, (snapshot) => {
-    if (!snapshot.empty) {
-      const newData = snapshot.docs[0].data();
-      
-      const newPoint = {
-        time: newData.createdAt ? new Date(newData.createdAt * 1000) : new Date(newData.timestamp * 1000),
-        altitude: newData.altitude,
-        latitude: newData.latitude,
-        longitude: newData.longitude
-      };
-      
-      // Add new point
-      chartData.value.push(newPoint);
-      
-      // Keep only last 'dataLimit' points
-      if (chartData.value.length > props.dataLimit) {
-        chartData.value.shift(); // Remove oldest point
-      }
-      
-      // Update chart
-      updateChart();
-      
-      console.log('📈 Chart updated with new altitude:', newData.altitude);
-    }
-  });
 }
 
 // Create chart
@@ -181,9 +145,6 @@ function createChart() {
     options: {
       responsive: true,
       maintainAspectRatio: false,
-      animation: {
-        duration: 750  // Smooth animation when updating
-      },
       plugins: {
         legend: {
           display: false,
@@ -240,39 +201,14 @@ function createChart() {
   });
 }
 
-// Update chart with new data
-function updateChart() {
-  if (!altitudeChart || chartData.value.length === 0) return;
-  
-  // Update labels and data
-  altitudeChart.data.labels = chartData.value.map(d => d.time.toLocaleTimeString());
-  altitudeChart.data.datasets[0].data = chartData.value.map(d => d.altitude);
-  
-  // Smooth update
-  altitudeChart.update('active');
-}
-
 onMounted(async () => {
   await loadChartData();
   
   setTimeout(() => {
     createChart();
-    setupRealTimeUpdates();  // Start listening for new data
   }, 100);
 });
-
-onUnmounted(() => {
-  if (unsubscribe) {
-    unsubscribe();
-    console.log('📈 Chart real-time updates stopped');
-  }
-  
-  if (altitudeChart) {
-    altitudeChart.destroy();
-  }
-});
 </script>
-
 <style scoped>
 .altitude-chart-card {
   border-radius: 8px;
@@ -379,7 +315,7 @@ onUnmounted(() => {
   }
   
   .stat-item {
-    padding: 0.2rem 0;
+    padding: 2rem 0;
   }
   
   .stat-label {
