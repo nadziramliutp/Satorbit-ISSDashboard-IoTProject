@@ -69,7 +69,7 @@ app.get('/api/iss-location', async (req, res) => {
 // ✅ Optional: API endpoint to get stored ISS data
 app.get('/api/iss-data', async (req, res) => {
   try {
-    const querySnapshot = await db.collection('iss_data')
+    const querySnapshot = await db.collection('iss_location')
       .orderBy('createdAt', 'desc')
       .limit(50)
       .get();
@@ -146,9 +146,4 @@ app.listen(PORT, '0.0.0.0', () => {
   setInterval(simpleCleanup, 30 * 60 * 1000); // Every 30 minutes
   console.log('🛰️ ISS tracking started');
   console.log('🧹 Cleanup scheduled every 30 minutes (keeps 1000 records)');
-});
-// Optional: Manual cleanup endpoint
-app.post('/cleanup-now', async (req, res) => {
-  await simpleCleanup();
-  res.json({ message: 'Cleanup completed' });
 });
