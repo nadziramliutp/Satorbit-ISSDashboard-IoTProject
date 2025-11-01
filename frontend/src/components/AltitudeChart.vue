@@ -5,11 +5,15 @@
         📈 Altitude Changes Over Time
       </h1>
       <span class="data-points">{{ dataPoints }} data points</span>
+      <span class="real-time-indicator">🟢 Live</span>
     </VaCardTitle>
     
     <VaCardContent>
       <div v-if="loading" class="loading">
         Loading chart data...
+      </div>
+      <div v-else-if="error" class="error">
+        ❌ Error: {{ error }}
       </div>
       
       <div v-else class="chart-container">
@@ -33,6 +37,10 @@
           <span class="stat-label">Avg:</span>
           <span class="stat-value">{{ avgAlt.toFixed(2) }} km</span>
         </div>
+        <div class="stat-item">
+          <span class="stat-label">Last Update:</span>
+          <span class="stat-value">{{ lastUpdateTime }}</span>
+        </div>
       </div>
     </VaCardContent>
   </VaCard>
@@ -47,7 +55,9 @@ import { Chart, registerables } from 'chart.js';
 Chart.register(...registerables);
 
 const loading = ref(true);
+const error = ref(null);
 const chartData = ref([]);
+const lastUpdateTime = ref('Never');
 let altitudeChart = null;
 let unsubscribe = null;
 
@@ -83,80 +93,110 @@ const avgAlt = computed(() => {
 // Load initial data
 async function loadChartData() {
   loading.value = true;
+  error.value = null;
   
-  const q = query(
-    collection(db, 'iss_location'),
-    orderBy('createdAt', 'asc'),
-    limit(props.dataLimit)
-  );
-  
-  const snapshot = await getDocs(q);
-  chartData.value = [];
-  
-  snapshot.forEach(doc => {
-    const data = doc.data();
-    chartData.value.push({
-      time: data.createdAt ? new Date(data.createdAt * 1000) : new Date(data.timestamp * 1000),
-      altitude: data.altitude,
-      latitude: data.latitude,
-      longitude: data.longitude
+  try {
+    const q = query(
+      collection(db, 'iss_location'),
+      orderBy('createdAt', 'asc'),
+      limit(props.dataLimit)
+    );
+    
+    const snapshot = await getDocs(q);
+    chartData.value = [];
+    
+    snapshot.forEach(doc => {
+      const data = doc.data();
+      chartData.value.push({
+        time: data.createdAt ? new Date(data.createdAt * 1000) : new Date(data.timestamp * 1000),
+        altitude: data.altitude,
+        latitude: data.latitude,
+        longitude: data.longitude
+      });
     });
-  });
-  
-  loading.value = false;
-  
-  console.log(`📈 Loaded ${chartData.value.length} points for chart`);
+    
+    lastUpdateTime.value = new Date().toLocaleTimeString();
+    console.log(`📈 Loaded ${chartData.value.length} points for chart`);
+    
+  } catch (err) {
+    console.error('Error loading chart data:', err);
+    error.value = err.message;
+  } finally {
+    loading.value = false;
+  }
 }
 
 // Setup real-time listener
 function setupRealTimeUpdates() {
-  const q = query(
-    collection(db, 'iss_location'),
-    orderBy('createdAt', 'desc'),
-    limit(1)
-  );
-  
-  unsubscribe = onSnapshot(q, (snapshot) => {
-    if (!snapshot.empty) {
-      const newData = snapshot.docs[0].data();
-      
-      const newPoint = {
-        time: newData.createdAt ? new Date(newData.createdAt * 1000) : new Date(newData.timestamp * 1000),
-        altitude: newData.altitude,
-        latitude: newData.latitude,
-        longitude: newData.longitude
-      };
-      
-      // Add new point
-      chartData.value.push(newPoint);
-      
-      // Keep only last 'dataLimit' points
-      if (chartData.value.length > props.dataLimit) {
-        chartData.value.shift(); // Remove oldest point
+  try {
+    console.log('🟢 Starting real-time Firestore listener...');
+    
+    const q = query(
+      collection(db, 'iss_location'),
+      orderBy('createdAt', 'desc'),
+      limit(1)
+    );
+    
+    unsubscribe = onSnapshot(q, 
+      (snapshot) => {
+        // Success callback
+        if (!snapshot.empty) {
+          const newData = snapshot.docs[0].data();
+          
+          const newPoint = {
+            time: newData.createdAt ? new Date(newData.createdAt * 1000) : new Date(newData.timestamp * 1000),
+            altitude: newData.altitude,
+            latitude: newData.latitude,
+            longitude: newData.longitude
+          };
+          
+          // Add new point
+          chartData.value.push(newPoint);
+          
+          // Keep only last 'dataLimit' points
+          if (chartData.value.length > props.dataLimit) {
+            chartData.value.shift(); // Remove oldest point
+          }
+          
+          // Update chart
+          updateChart();
+          lastUpdateTime.value = new Date().toLocaleTimeString();
+          
+          console.log('📈 Real-time update - New altitude:', newData.altitude, 'km');
+        }
+      },
+      (err) => {
+        // Error callback
+        console.error('❌ Real-time listener error:', err);
+        error.value = 'Real-time updates disconnected';
       }
-      
-      // Update chart
-      updateChart();
-      
-      console.log('📈 Chart updated with new altitude:', newData.altitude);
-    }
-  });
+    );
+    
+    console.log('✅ Real-time listener established');
+    
+  } catch (err) {
+    console.error('❌ Failed to setup real-time listener:', err);
+    error.value = 'Failed to setup real-time updates';
+  }
 }
 
 // Create chart
 function createChart() {
   const ctx = document.getElementById('altitudeChart');
   
-  if (!ctx || chartData.value.length === 0) return;
-  
-  // Prepare data
-  const labels = chartData.value.map(d => d.time.toLocaleTimeString());
-  const altitudes = chartData.value.map(d => d.altitude);
+  if (!ctx || chartData.value.length === 0) {
+    console.log('No chart data available or canvas not found');
+    return;
+  }
   
   // Destroy existing chart if any
   if (altitudeChart) {
     altitudeChart.destroy();
   }
+  
+  // Prepare data
+  const labels = chartData.value.map(d => d.time.toLocaleTimeString());
+  const altitudes = chartData.value.map(d => d.altitude);
   
   // Create new chart
   altitudeChart = new Chart(ctx, {
@@ -252,19 +292,28 @@ function updateChart() {
   altitudeChart.update('active');
 }
 
+// Manual refresh
+async function manualRefresh() {
+  console.log('🔄 Manual refresh triggered');
+  await loadChartData();
+  createChart();
+}
+
 onMounted(async () => {
+  console.log('🎯 AltitudeChart mounted');
   await loadChartData();
   
   setTimeout(() => {
     createChart();
-    setupRealTimeUpdates();  // Start listening for new data
+    setupRealTimeUpdates();  // Start real-time listener
   }, 100);
 });
 
 onUnmounted(() => {
+  console.log('🗑️ AltitudeChart unmounted');
   if (unsubscribe) {
     unsubscribe();
-    console.log('📈 Chart real-time updates stopped');
+    console.log('📈 Real-time updates stopped');
   }
   
   if (altitudeChart) {
