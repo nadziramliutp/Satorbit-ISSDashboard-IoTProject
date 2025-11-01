@@ -1,9 +1,28 @@
+const express = require('express');
 const admin = require('firebase-admin');
 const axios = require('axios');
 
+const app = express();
+
+// ✅ Add these routes for Render's health checks
+app.get('/health', (req, res) => {
+  res.json({ 
+    status: 'OK', 
+    service: 'ISS Data Fetcher',
+    timestamp: new Date().toISOString()
+  });
+});
+
+app.get('/', (req, res) => {
+  res.json({ 
+    message: 'ISS Location Tracker API - Data fetching service is running',
+    lastUpdated: new Date().toISOString()
+  });
+});
+
+// Your existing ISS fetching code (NO CHANGES NEEDED)
 console.log('Starting backend service...');
 
-// ✅ Load credential from environment variables
 const serviceAccount = {
   type: process.env.FIREBASE_TYPE || "service_account",
   project_id: process.env.FIREBASE_PROJECT_ID,
@@ -19,43 +38,44 @@ const serviceAccount = {
 };
 
 console.log('✅ Environment variables loaded successfully!');
-console.log(`   Project ID: ${serviceAccount.project_id}`);
-console.log(`   Client Email: ${serviceAccount.client_email}\n`);
 
 // Initialize Firebase Admin SDK
 admin.initializeApp({
-    credential: admin.credential.cert(serviceAccount),
+  credential: admin.credential.cert(serviceAccount),
 });
-console.log('✅ Firebase Admin SDK initialized successfully!\n');
+console.log('✅ Firebase Admin SDK initialized successfully!');
 
 // Get the firestore database instance
 const db = admin.firestore();
-console.log('✅ Firestore database instance obtained successfully!\n');
+console.log('✅ Firestore database instance obtained successfully!');
 
 const ISS_API_URL = 'https://api.wheretheiss.at/v1/satellites/25544';
-async function fetchISSLocation() {
-    try {
-        const response = await axios.get(ISS_API_URL);
-        const data = response.data;
-        await db.collection('iss_location').add({
-        latitude: data.latitude,
-        longitude: data.longitude,
-        altitude: data.altitude,
-        velocity : data.velocity,
-        timestamp: data.timestamp,
-        createdAt: admin.firestore.FieldValue.serverTimestamp()
-    });
-    console.log('Fetched ISS location data:', data);
-    console.log('\t Latitude:', data.latitude);
-    console.log('\t Longitude:', data.longitude);
-    console.log('\t Altitude:', data.altitude);
-    console.log('\t Velocity:', data.velocity);
-    console.log('\t Timestamp:', data.timestamp);
-    console.log('✅ ISS location data stored in Firestore successfully!\n');
-    } catch (error) {
-        console.error('❌ Error fetching or storing ISS location data:', error);
-    }
-}
-fetchISSLocation();
-setInterval(fetchISSLocation, 6000); // Fetch every 60 seconds
 
+async function fetchISSLocation() {
+  try {
+    const response = await axios.get(ISS_API_URL);
+    const data = response.data;
+    await db.collection('iss_location').add({
+      latitude: data.latitude,
+      longitude: data.longitude,
+      altitude: data.altitude,
+      velocity: data.velocity,
+      timestamp: data.timestamp,
+      createdAt: admin.firestore.FieldValue.serverTimestamp()
+    });
+    console.log('✅ ISS data stored at:', new Date().toLocaleTimeString());
+  } catch (error) {
+    console.error('❌ Error fetching ISS data:', error.message);
+  }
+}
+
+// Start fetching data
+fetchISSLocation();
+setInterval(fetchISSLocation, 60000); // Fetch every 60 seconds
+
+// ⭐⭐⭐ CRITICAL: Add this at the end ⭐⭐⭐
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`✅ HTTP server running on port ${PORT}`);
+  console.log(`🌐 Health check: http://localhost:${PORT}/health`);
+});

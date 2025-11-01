@@ -5,6 +5,7 @@
         📈 Altitude Changes Over Time
       </h1>
       <span class="data-points">{{ dataPoints }} data points</span>
+      <span class="update-info">(Updates every 10 seconds)</span>
     </VaCardTitle>
     
     <VaCardContent>
@@ -33,6 +34,10 @@
           <span class="stat-label">Avg:</span>
           <span class="stat-value">{{ avgAlt.toFixed(2) }} km</span>
         </div>
+        <div class="stat-item">
+          <span class="stat-label">Last Update:</span>
+          <span class="stat-value">{{ lastUpdateTime }}</span>
+        </div>
       </div>
     </VaCardContent>
   </VaCard>
@@ -48,8 +53,9 @@ Chart.register(...registerables);
 
 const loading = ref(true);
 const chartData = ref([]);
+const lastUpdateTime = ref('Never');
 let altitudeChart = null;
-let unsubscribe = null;
+let pollInterval = null; // Changed from unsubscribe to pollInterval
 
 // Props - make it flexible
 const props = defineProps({
@@ -80,7 +86,7 @@ const avgAlt = computed(() => {
   return sum / chartData.value.length;
 });
 
-// Load initial data
+// Load initial data - EXACTLY THE SAME
 async function loadChartData() {
   loading.value = true;
   
@@ -103,47 +109,70 @@ async function loadChartData() {
     });
   });
   
+  lastUpdateTime.value = new Date().toLocaleTimeString();
   loading.value = false;
   
   console.log(`📈 Loaded ${chartData.value.length} points for chart`);
 }
 
-// Setup real-time listener
-function setupRealTimeUpdates() {
-  const q = query(
-    collection(db, 'iss_location'),
-    orderBy('createdAt', 'desc'),
-    limit(1)
-  );
-  
-  unsubscribe = onSnapshot(q, (snapshot) => {
-    if (!snapshot.empty) {
-      const newData = snapshot.docs[0].data();
+// CHANGED: Polling instead of real-time listener
+function setupDataPolling() {
+  // Poll every 10 seconds for new data
+  pollInterval = setInterval(async () => {
+    try {
+      console.log('🔄 Polling for new ISS data...');
       
-      const newPoint = {
-        time: newData.createdAt ? new Date(newData.createdAt * 1000) : new Date(newData.timestamp * 1000),
-        altitude: newData.altitude,
-        latitude: newData.latitude,
-        longitude: newData.longitude
-      };
+      const q = query(
+        collection(db, 'iss_location'),
+        orderBy('createdAt', 'desc'),
+        limit(1)
+      );
       
-      // Add new point
-      chartData.value.push(newPoint);
+      const snapshot = await getDocs(q);
       
-      // Keep only last 'dataLimit' points
-      if (chartData.value.length > props.dataLimit) {
-        chartData.value.shift(); // Remove oldest point
+      if (!snapshot.empty) {
+        const newData = snapshot.docs[0].data();
+        const newTimestamp = newData.createdAt ? newData.createdAt.seconds : newData.timestamp;
+        
+        // Check if this is actually new data (compare with latest timestamp)
+        const latestTimestamp = chartData.value.length > 0 
+          ? (chartData.value[chartData.value.length - 1].time.getTime() / 1000)
+          : 0;
+          
+        if (newTimestamp > latestTimestamp) {
+          const newPoint = {
+            time: newData.createdAt ? new Date(newData.createdAt * 1000) : new Date(newData.timestamp * 1000),
+            altitude: newData.altitude,
+            latitude: newData.latitude,
+            longitude: newData.longitude
+          };
+          
+          // Add new point
+          chartData.value.push(newPoint);
+          
+          // Keep only last 'dataLimit' points
+          if (chartData.value.length > props.dataLimit) {
+            chartData.value.shift(); // Remove oldest point
+          }
+          
+          // Update chart
+          updateChart();
+          lastUpdateTime.value = new Date().toLocaleTimeString();
+          
+          console.log('📈 Chart updated with new altitude:', newData.altitude);
+        } else {
+          console.log('📈 No new data found in polling');
+          lastUpdateTime.value = new Date().toLocaleTimeString() + ' (no change)';
+        }
       }
-      
-      // Update chart
-      updateChart();
-      
-      console.log('📈 Chart updated with new altitude:', newData.altitude);
+    } catch (error) {
+      console.error('Error during polling:', error);
+      lastUpdateTime.value = new Date().toLocaleTimeString() + ' (error)';
     }
-  });
+  }, 10000); // 10 seconds
 }
 
-// Create chart
+// Create chart - EXACTLY THE SAME
 function createChart() {
   const ctx = document.getElementById('altitudeChart');
   
@@ -240,7 +269,7 @@ function createChart() {
   });
 }
 
-// Update chart with new data
+// Update chart with new data - EXACTLY THE SAME
 function updateChart() {
   if (!altitudeChart || chartData.value.length === 0) return;
   
@@ -257,14 +286,15 @@ onMounted(async () => {
   
   setTimeout(() => {
     createChart();
-    setupRealTimeUpdates();  // Start listening for new data
+    setupDataPolling();  // Start polling for new data every 10 seconds
   }, 100);
 });
 
 onUnmounted(() => {
-  if (unsubscribe) {
-    unsubscribe();
-    console.log('📈 Chart real-time updates stopped');
+  // CHANGED: Clear interval instead of unsubscribing
+  if (pollInterval) {
+    clearInterval(pollInterval);
+    console.log('📈 Chart polling stopped');
   }
   
   if (altitudeChart) {
