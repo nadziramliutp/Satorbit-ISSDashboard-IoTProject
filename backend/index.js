@@ -109,6 +109,28 @@ async function fetchISSLocation() {
     }
 }
 
+// 🧹 SIMPLE CLEANUP - Keep only 1000 latest records
+async function simpleCleanup() {
+  try {
+    console.log('🧹 Running cleanup...');
+    
+    const snapshot = await db.collection('iss_location')
+      .orderBy('createdAt', 'desc')
+      .get();
+    
+    if (snapshot.size > 1000) {
+      const recordsToDelete = snapshot.docs.slice(1000);
+      const deletePromises = recordsToDelete.map(doc => doc.ref.delete());
+      await Promise.all(deletePromises);
+      
+      console.log(`✅ Cleanup done: Deleted ${deletePromises.length} records, kept 1000`);
+    } else {
+      console.log(`📊 No cleanup needed: ${snapshot.size}/1000 records`);
+    }
+  } catch (error) {
+    console.error('❌ Cleanup error:', error);
+  }
+}
 // Start the server
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 Server running on port ${PORT}`);
@@ -119,24 +141,14 @@ app.listen(PORT, '0.0.0.0', () => {
   fetchISSLocation();
   setInterval(fetchISSLocation, 60000); // Fetch every 60 seconds
   console.log('🛰️ ISS tracking started - fetching data every 60 seconds');
+  // 🧹 Start cleanup - run immediately and every 30 minutes
+  simpleCleanup();
+  setInterval(simpleCleanup, 30 * 60 * 1000); // Every 30 minutes
+  console.log('🛰️ ISS tracking started');
+  console.log('🧹 Cleanup scheduled every 30 minutes (keeps 1000 records)');
 });
-// Add this function to your backend
-async function cleanupOldData() {
-  try {
-    const snapshot = await db.collection('iss_location')
-      .orderBy('createdAt', 'asc')
-      .get();
-    
-    if (snapshot.size > 1000) {
-      const documentsToDelete = snapshot.docs.slice(0, snapshot.size - 1000);
-      const deletePromises = documentsToDelete.map(doc => doc.ref.delete());
-      await Promise.all(deletePromises);
-      console.log(`🧹 Cleaned up ${deletePromises.length} old records`);
-    }
-  } catch (error) {
-    console.error('Error cleaning up old data:', error);
-  }
-}
-
-// Run cleanup every hour
-setInterval(cleanupOldData, 3600000); // 1 hour
+// Optional: Manual cleanup endpoint
+app.post('/cleanup-now', async (req, res) => {
+  await simpleCleanup();
+  res.json({ message: 'Cleanup completed' });
+});
