@@ -1,184 +1,186 @@
 <script setup>
-import { ref, onMounted } from 'vue'
-import {db } from '../firebase'
-import { collection, getDocs, query, orderBy, limit } from 'firebase/firestore'
+import { ref, onMounted, onUnmounted } from 'vue'
+import { db } from '../firebase'
+import { collection, query, orderBy, limit, onSnapshot } from 'firebase/firestore'
 
-//import component
-import CurrentPosition from '../components/CurrentPosition.vue'
 const datalist = ref([]);
-/* onMounted(async () => {
-  const querySnapshot = await getDocs(collection(db, "iss_location"));
-  querySnapshot.forEach((doc) => {
-    datalist.value.push({ id: doc.id, ...doc.data() });
-    console.log('Fetched data:', datalist.value)
-  });
-});*/
-onMounted(async () => {
-  const q = query(collection(db, "iss_location"), orderBy("timestamp", "desc"), limit(10));
-  const querySnapshot = await getDocs(q);
-  querySnapshot.forEach((doc) => {
-    datalist.value.push({ id: doc.id, ...doc.data() });
-    console.log('Fetched 10 data:', datalist.value);
-  });
-});
+let unsubscribe = null;  // ✅ Added for cleanup
+
 function formatTime(timestamp) {
   const date = new Date(timestamp * 1000);
   return date.toLocaleTimeString();
 }
+
+onMounted(() => {
+  const q = query(
+    collection(db, "iss_location"), 
+    orderBy("createdAt", "desc"), 
+    limit(10)
+  );
+  
+  // ✅ Changed from getDocs to onSnapshot
+  unsubscribe = onSnapshot(q, (querySnapshot) => {
+    datalist.value = [];  // Clear old data
+    
+    querySnapshot.forEach((doc) => {
+      datalist.value.push({ id: doc.id, ...doc.data() });
+    });
+    
+    console.log(`🔄 Table updated: ${datalist.value.length} rows`);
+  });
+});
+
+// ✅ Added cleanup
+onUnmounted(() => {
+  if (unsubscribe) {
+    unsubscribe();
+    console.log('📊 Table real-time updates stopped');
+  }
+});
 </script>
 
 <template>
-  <main>
-<div class="card">
-    <div class="card-header">
-      <h2>📊 ISS Telemetry Data</h2>
-    </div>
-    
-    <div class="card-content">
-      <div class="table-wrapper">
-        <table class="data-table">
-          <thead>
-            <tr>
-              <th>Time</th>
-              <th>Altitude</th>
-              <th>Longitude</th>
-              <th>Latitude</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="item in datalist" :key="item.id">
-              <td>{{ formatTime(item.createdAt) }}</td>
-              <td>{{ item.altitude.toFixed(2) }} km</td>
-              <td>{{ item.longitude.toFixed(4) }}°</td>
-              <td>{{ item.latitude.toFixed(4) }}°</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
+  <div class="data-table-container">
+    <div class="table-wrapper">
+      <table class="iss-table">
+        <thead>
+          <tr>
+            <th>Time</th>
+            <th>Altitude</th>
+            <th>Longitude</th>
+            <th>Latitude</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="item in datalist" :key="item.id">
+            <td class="time-col">{{ formatTime(item.createdAt) }}</td>
+            <td class="alt-col">{{ item.altitude.toFixed(2) }}</td>
+            <td class="lon-col">{{ item.longitude.toFixed(4) }}°</td>
+            <td class="lat-col">{{ item.latitude.toFixed(4) }}°</td>
+          </tr>
+        </tbody>
+      </table>
     </div>
   </div>
-
-  </main>
 </template>
 
 <style scoped>
-/* Card Wrapper - Compact for Dashboard */
-.card {
-  background: white;
-  border: 1px solid #ddd;
-  border-radius: 8px;
+.data-table-container {
   height: 100%;
   display: flex;
   flex-direction: column;
-  min-height: 0;
-}
-
-.card-header {
+  background: transparent;
+  overflow: hidden;
   padding: 0.75rem;
-  border-bottom: 1px solid #ddd;
-  background: #f5f5f5;
-  flex-shrink: 0;
 }
 
-.card-header h2 {
-  margin: 0;
-  font-size: 1rem;
-  font-weight: bold;
-  font-family: 'Arial', sans-serif;
-}
-
-.card-content {
-  padding: 0;
+.table-wrapper {
   flex: 1;
   overflow: auto;
-  min-height: 0;
+  background: rgba(99, 102, 241, 0.02);
+  border-radius: 8px;
+  border: 1px solid rgba(99, 102, 241, 0.1);
 }
 
-/* Table Styles - Compact */
-.table-wrapper {
-  overflow: auto;
-  height: 300px;
-  max-height: 100%;
-}
-
-.data-table {
+.iss-table {
   width: 100%;
   border-collapse: collapse;
-  font-family: 'Arial', sans-serif;
-  font-size: 0.8rem;
+  font-size: 0.85rem;
 }
 
-.data-table thead {
+.iss-table thead {
   position: sticky;
   top: 0;
-  background: #f5f5f5;
+  background: rgba(99, 102, 241, 0.1);
   z-index: 10;
 }
 
-.data-table th {
-  padding: 0.5rem;
+.iss-table th {
+  padding: 0.75rem 0.5rem;
   text-align: left;
-  font-weight: bold;
-  font-size: 0.8rem;
-  border-bottom: 2px solid #ddd;
-  color: #333;
-  white-space: nowrap;
+  font-weight: 700;
+  font-size: 0.75rem;
+  color: #9ca3af;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  border-bottom: 1px solid rgba(99, 102, 241, 0.2);
 }
 
-.data-table td {
-  padding: 0.5rem;
-  border-bottom: 1px solid #eee;
-  font-size: 0.8rem;
-  color: #555;
-  white-space: nowrap;
+.iss-table td {
+  padding: 0.75rem 0.5rem;
+  border-bottom: 1px solid rgba(99, 102, 241, 0.05);
+  font-family: 'Courier New', monospace;
+  font-size: 0.85rem;
 }
 
-.data-table tbody tr:nth-child(even) {
-  background: #fafafa;
+.iss-table tbody tr {
+  transition: background 0.2s;
 }
 
-.data-table tbody tr:hover {
-  background: #f0f0f0;
+.iss-table tbody tr:hover {
+  background: rgba(99, 102, 241, 0.05);
 }
 
-/* Ensure the table takes full available height */
-.data-table tbody {
-  display: table-row-group;
+.iss-table tbody tr:nth-child(even) {
+  background: rgba(99, 102, 241, 0.02);
 }
 
-/* Compact scrollbar */
+/* Column colors */
+.time-col {
+  color: #e5e7eb;
+  font-weight: 600;
+}
+
+.alt-col {
+  color: #60a5fa;
+  font-weight: 700;
+}
+
+.alt-col::after {
+  content: ' km';
+  font-size: 0.7rem;
+  color: #64748b;
+  font-weight: 500;
+}
+
+.lon-col {
+  color: #a78bfa;
+  font-weight: 700;
+}
+
+.lat-col {
+  color: #34d399;
+  font-weight: 700;
+}
+
+/* Scrollbar */
 .table-wrapper::-webkit-scrollbar {
   width: 6px;
   height: 6px;
 }
 
 .table-wrapper::-webkit-scrollbar-track {
-  background: #f1f1f1;
+  background: rgba(99, 102, 241, 0.05);
   border-radius: 3px;
 }
 
 .table-wrapper::-webkit-scrollbar-thumb {
-  background: #c1c1c1;
+  background: rgba(99, 102, 241, 0.3);
   border-radius: 3px;
 }
 
 .table-wrapper::-webkit-scrollbar-thumb:hover {
-  background: #a8a8a8;
+  background: rgba(99, 102, 241, 0.5);
 }
 
-/* Responsive adjustments */
 @media (max-width: 768px) {
-  .card-header {
+  .data-table-container {
     padding: 0.5rem;
   }
   
-  .card-header h2 {
-    font-size: 0.9rem;
-  }
-  
-  .data-table th,
-  .data-table td {
-    padding: 0.4rem;
+  .iss-table th,
+  .iss-table td {
+    padding: 0.5rem 0.4rem;
     font-size: 0.75rem;
   }
 }

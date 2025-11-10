@@ -1,18 +1,23 @@
 <template>
-  <div class="iss-map-card">
-    <div class="card-header">
-      <h2>🗺️ Live ISS Position & Path</h2>
-    </div>
-    
+  <div class="iss-map">
     <div id="map"></div>
     
-    <div class="map-info">
-      <p>
-        <strong>Current:</strong> 
-        {{ currentLat.toFixed(4) }}°, {{ currentLon.toFixed(4) }}° | 
-        <strong>Alt:</strong> {{ currentAlt.toFixed(2) }} km
-      </p>
-      <p class="path-info">Showing last 200 positions</p>
+    <div class="map-footer">
+      <div class="position-info">
+        <div class="info-row">
+          <span class="info-label">Lat:</span>
+          <span class="info-value">{{ currentLat.toFixed(4) }}°</span>
+        </div>
+        <div class="info-row">
+          <span class="info-label">Lon:</span>
+          <span class="info-value">{{ currentLon.toFixed(4) }}°</span>
+        </div>
+        <div class="info-row">
+          <span class="info-label">Alt:</span>
+          <span class="info-value">{{ currentAlt.toFixed(2) }} km</span>
+        </div>
+      </div>
+      <div class="path-count">{{ pathCount }} positions</div>
     </div>
   </div>
 </template>
@@ -27,18 +32,18 @@ import 'leaflet/dist/leaflet.css';
 const currentLat = ref(0);
 const currentLon = ref(0);
 const currentAlt = ref(0);
+const pathCount = ref(0);
 
 let map = null;
 let marker = null;
 let pathLine = null;
 let unsubscribe = null;
 
-// Load path
 async function loadPath() {
   const q = query(
     collection(db, 'iss_location'),
     orderBy('createdAt', 'desc'),
-    limit(200)
+    limit(100)
   );
   
   const snapshot = await getDocs(q);
@@ -49,12 +54,13 @@ async function loadPath() {
     coords.push([d.latitude, d.longitude]);
   });
   
+  pathCount.value = coords.length;
+  
   if (pathLine && coords.length > 0) {
     pathLine.setLatLngs(coords.reverse());
   }
 }
 
-// Setup real-time current position
 function setupRealTime() {
   const q = query(
     collection(db, 'iss_location'),
@@ -79,12 +85,15 @@ function setupRealTime() {
 }
 
 onMounted(async () => {
-  // Initialize map
-  map = L.map('map').setView([0, 0], 2);
+  // Dark theme tile layer
+  map = L.map('map', {
+    zoomControl: true,
+    attributionControl: false
+  }).setView([0, 0], 2);
   
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    attribution: '© OpenStreetMap'
-  }).addTo(map);
+L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+  maxZoom: 19
+}).addTo(map);
   
   // ISS icon
   const icon = L.icon({
@@ -94,82 +103,133 @@ onMounted(async () => {
   });
   
   marker = L.marker([0, 0], { icon }).addTo(map);
-  pathLine = L.polyline([], { color: '#667eea', weight: 3 }).addTo(map);
   
-  // Load data
+  // Path line (light blue to match theme)
+  pathLine = L.polyline([], { 
+    color: '#60a5fa', 
+    weight: 2,
+    opacity: 0.8
+  }).addTo(map);
+  
   await loadPath();
   setupRealTime();
 });
 
 onUnmounted(() => {
   if (unsubscribe) unsubscribe();
+  if (map) map.remove();
 });
 </script>
 
 <style scoped>
-.iss-map-card {
-  background: white;
-  border-radius: 8px;
-  border: 1px solid #e2e8f0;
+.iss-map {
   height: 100%;
   display: flex;
   flex-direction: column;
-  min-height: 0;
-}
-
-.card-header {
-  padding: 0.75rem 1rem;
-  border-bottom: 1px solid #e2e8f0;
-  background: #f8fafc;
-}
-
-.card-header h2 {
-  margin: 0;
-  font-size: 0.9rem;
-  color: #1e293b;
-  font-weight: 600;
+  background: transparent;
+  overflow: hidden;
 }
 
 #map {
   flex: 1;
-  min-height: 250px;
-  border-radius: 0;
+  min-height: 0;
+  background: #1a1f2e;
+  border-radius: 8px;
+  overflow: hidden;
 }
 
-.map-info {
-  padding: 0.75rem 1rem;
-  border-top: 1px solid #e2e8f0;
-  background: #f8fafc;
+.map-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.75rem;
+  margin-top: 0.75rem;
+  background: rgba(99, 102, 241, 0.05);
+  border: 1px solid rgba(99, 102, 241, 0.15);
+  border-radius: 8px;
+  flex-shrink: 0;
 }
 
-.map-info p {
-  margin: 0.25rem 0;
-  font-size: 0.8rem;
-  color: #475569;
+.position-info {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+.info-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
 }
 
-.path-info {
+.coord {
+  font-size: 0.85rem;
+  color: #e5e7eb;
+  font-weight: 600;
+  font-family: 'Courier New', monospace;
+}
+.info-label {
   font-size: 0.75rem;
-  color: #64748b;
+  color: #9ca3af;
+  font-weight: 600;
+  text-transform: uppercase;
 }
 
-/* Ensure map container works properly */
-.iss-map-card {
-  position: relative;
+.info-value {
+  font-size: 0.85rem;
+  color: #e5e7eb;
+  font-weight: 600;
+  font-family: 'Courier New', monospace;
 }
 
-/* Responsive adjustments */
+.altitude {
+  font-size: 0.75rem;
+  color: #60a5fa;
+  font-weight: 600;
+}
+
+.path-count {
+  font-size: 0.75rem;
+  color: #9ca3af;
+  padding: 0.25rem 0.5rem;
+  background: rgba(99, 102, 241, 0.1);
+  border-radius: 12px;
+  border: 1px solid rgba(99, 102, 241, 0.2);
+}
+
+/* Dark theme for Leaflet controls */
+:deep(.leaflet-control-zoom) {
+  border: 1px solid rgba(99, 102, 241, 0.3) !important;
+  background: #1e293b !important;
+}
+
+:deep(.leaflet-control-zoom a) {
+  background: #1e293b !important;
+  color: #e5e7eb !important;
+  border-bottom: 1px solid rgba(99, 102, 241, 0.2) !important;
+}
+
+:deep(.leaflet-control-zoom a:hover) {
+  background: #334155 !important;
+}
+
+:deep(.leaflet-popup-content-wrapper) {
+  background: #1e293b !important;
+  color: #e5e7eb !important;
+}
+
+:deep(.leaflet-popup-tip) {
+  background: #1e293b !important;
+}
+
 @media (max-width: 768px) {
-  .card-header {
-    padding: 0.5rem 0.75rem;
+  .map-footer {
+    flex-direction: column;
+    gap: 0.5rem;
+    align-items: flex-start;
   }
   
-  .map-info {
-    padding: 0.5rem 0.75rem;
-  }
-  
-  #map {
-    min-height: 200px;
+  .coord {
+    font-size: 0.8rem;
   }
 }
 </style>

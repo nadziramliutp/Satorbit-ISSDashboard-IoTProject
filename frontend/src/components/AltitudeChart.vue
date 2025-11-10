@@ -1,49 +1,32 @@
 <template>
-  <VaCard class="altitude-chart-card">
-    <VaCardTitle class="card-title-wrapper">
-      <h1 class="card-title">
-        📈 Altitude Changes Over Time
-      </h1>
-      <span class="data-points">{{ dataPoints }} data points</span>
-      <span class="real-time-indicator">🟢 Live</span>
-    </VaCardTitle>
+  <div class="altitude-chart">
+    <div v-if="loading" class="loading">Loading chart...</div>
     
-    <VaCardContent>
-      <div v-if="loading" class="loading">
-        Loading chart data...
-      </div>
-      <div v-else-if="error" class="error">
-        ❌ Error: {{ error }}
-      </div>
-      
-      <div v-else class="chart-container">
+    <div v-else class="chart-content">
+      <div class="chart-wrapper">
         <canvas id="altitudeChart"></canvas>
       </div>
       
-      <div class="chart-stats">
-        <div class="stat-item">
-          <span class="stat-label">Max:</span>
-          <span class="stat-value">{{ maxAlt.toFixed(2) }} km</span>
+      <div class="stats">
+        <div class="stat">
+          <span class="label">Max</span>
+          <span class="value">{{ maxAlt.toFixed(1) }}</span>
         </div>
-        <div class="stat-item">
-          <span class="stat-label">Min:</span>
-          <span class="stat-value">{{ minAlt.toFixed(2) }} km</span>
+        <div class="stat">
+          <span class="label">Min</span>
+          <span class="value">{{ minAlt.toFixed(1) }}</span>
         </div>
-        <div class="stat-item">
-          <span class="stat-label">Range:</span>
-          <span class="stat-value">{{ altRange.toFixed(2) }} km</span>
+        <div class="stat">
+          <span class="label">Avg</span>
+          <span class="value">{{ avgAlt.toFixed(1) }}</span>
         </div>
-        <div class="stat-item">
-          <span class="stat-label">Avg:</span>
-          <span class="stat-value">{{ avgAlt.toFixed(2) }} km</span>
-        </div>
-        <div class="stat-item">
-          <span class="stat-label">Last Update:</span>
-          <span class="stat-value">{{ lastUpdateTime }}</span>
+        <div class="stat">
+          <span class="label">Range</span>
+          <span class="value">{{ altRange.toFixed(1) }}</span>
         </div>
       </div>
-    </VaCardContent>
-  </VaCard>
+    </div>
+  </div>
 </template>
 
 <script setup>
@@ -55,22 +38,16 @@ import { Chart, registerables } from 'chart.js';
 Chart.register(...registerables);
 
 const loading = ref(true);
-const error = ref(null);
 const chartData = ref([]);
-const lastUpdateTime = ref('Never');
 let altitudeChart = null;
 let unsubscribe = null;
 
-// Props - make it flexible
 const props = defineProps({
   dataLimit: {
     type: Number,
-    default: 50  // Show last 50 points by default
+    default: 50
   }
 });
-
-// Computed stats
-const dataPoints = computed(() => chartData.value.length);
 
 const maxAlt = computed(() => {
   if (chartData.value.length === 0) return 0;
@@ -90,154 +67,91 @@ const avgAlt = computed(() => {
   return sum / chartData.value.length;
 });
 
-// Load initial data
 async function loadChartData() {
   loading.value = true;
-  error.value = null;
   
-  try {
-    const q = query(
-      collection(db, 'iss_location'),
-      orderBy('createdAt', 'asc'),
-      limit(props.dataLimit)
-    );
-    
-    const snapshot = await getDocs(q);
-    chartData.value = [];
-    
-    snapshot.forEach(doc => {
-      const data = doc.data();
-      chartData.value.push({
-        time: data.createdAt ? new Date(data.createdAt * 1000) : new Date(data.timestamp * 1000),
-        altitude: data.altitude,
-        latitude: data.latitude,
-        longitude: data.longitude
-      });
+  const q = query(
+    collection(db, 'iss_location'),
+    orderBy('createdAt', 'asc'),
+    limit(props.dataLimit)
+  );
+  
+  const snapshot = await getDocs(q);
+  chartData.value = [];
+  
+  snapshot.forEach(doc => {
+    const data = doc.data();
+    chartData.value.push({
+      time: data.createdAt ? new Date(data.createdAt * 1000) : new Date(data.timestamp * 1000),
+      altitude: data.altitude
     });
-    
-    lastUpdateTime.value = new Date().toLocaleTimeString();
-    console.log(`📈 Loaded ${chartData.value.length} points for chart`);
-    
-  } catch (err) {
-    console.error('Error loading chart data:', err);
-    error.value = err.message;
-  } finally {
-    loading.value = false;
-  }
+  });
+  
+  loading.value = false;
 }
 
-// Setup real-time listener
 function setupRealTimeUpdates() {
-  try {
-    console.log('🟢 Starting real-time Firestore listener...');
-    
-    const q = query(
-      collection(db, 'iss_location'),
-      orderBy('createdAt', 'desc'),
-      limit(1)
-    );
-    
-    unsubscribe = onSnapshot(q, 
-      (snapshot) => {
-        // Success callback
-        if (!snapshot.empty) {
-          const newData = snapshot.docs[0].data();
-          
-          const newPoint = {
-            time: newData.createdAt ? new Date(newData.createdAt * 1000) : new Date(newData.timestamp * 1000),
-            altitude: newData.altitude,
-            latitude: newData.latitude,
-            longitude: newData.longitude
-          };
-          
-          // Add new point
-          chartData.value.push(newPoint);
-          
-          // Keep only last 'dataLimit' points
-          if (chartData.value.length > props.dataLimit) {
-            chartData.value.shift(); // Remove oldest point
-          }
-          
-          // Update chart
-          updateChart();
-          lastUpdateTime.value = new Date().toLocaleTimeString();
-          
-          console.log('📈 Real-time update - New altitude:', newData.altitude, 'km');
-        }
-      },
-      (err) => {
-        // Error callback
-        console.error('❌ Real-time listener error:', err);
-        error.value = 'Real-time updates disconnected';
+  const q = query(
+    collection(db, 'iss_location'),
+    orderBy('createdAt', 'desc'),
+    limit(1)
+  );
+  
+  unsubscribe = onSnapshot(q, (snapshot) => {
+    if (!snapshot.empty) {
+      const newData = snapshot.docs[0].data();
+      
+      chartData.value.push({
+        time: newData.createdAt ? new Date(newData.createdAt * 1000) : new Date(newData.timestamp * 1000),
+        altitude: newData.altitude
+      });
+      
+      if (chartData.value.length > props.dataLimit) {
+        chartData.value.shift();
       }
-    );
-    
-    console.log('✅ Real-time listener established');
-    
-  } catch (err) {
-    console.error('❌ Failed to setup real-time listener:', err);
-    error.value = 'Failed to setup real-time updates';
-  }
+      
+      updateChart();
+    }
+  });
 }
 
-// Create chart
 function createChart() {
   const ctx = document.getElementById('altitudeChart');
+  if (!ctx || chartData.value.length === 0) return;
   
-  if (!ctx || chartData.value.length === 0) {
-    console.log('No chart data available or canvas not found');
-    return;
-  }
+  if (altitudeChart) altitudeChart.destroy();
   
-  // Destroy existing chart if any
-  if (altitudeChart) {
-    altitudeChart.destroy();
-  }
-  
-  // Prepare data
-  const labels = chartData.value.map(d => d.time.toLocaleTimeString());
-  const altitudes = chartData.value.map(d => d.altitude);
-  
-  // Create new chart
   altitudeChart = new Chart(ctx, {
     type: 'line',
     data: {
-      labels: labels,
+      labels: chartData.value.map(d => d.time.toLocaleTimeString()),
       datasets: [{
-        label: 'Altitude (km)',
-        data: altitudes,
-        borderColor: '#3b82f6',
-        backgroundColor: 'rgba(59, 130, 246, 0.1)',
+        label: 'Altitude',
+        data: chartData.value.map(d => d.altitude),
+        borderColor: '#60a5fa',
+        backgroundColor: 'rgba(96, 165, 250, 0.1)',
         borderWidth: 2,
-        tension: 0.3,
+        tension: 0.4,
         fill: true,
-        pointRadius: 2,
+        pointRadius: 0,
         pointHoverRadius: 4,
-        pointBackgroundColor: '#3b82f6',
-        pointBorderColor: '#fff',
-        pointBorderWidth: 1,
+        pointBackgroundColor: '#60a5fa',
+        pointBorderColor: '#1e293b',
+        pointBorderWidth: 2
       }]
     },
     options: {
       responsive: true,
       maintainAspectRatio: false,
-      animation: {
-        duration: 750  // Smooth animation when updating
-      },
+      animation: { duration: 500 },
       plugins: {
-        legend: {
-          display: false,
-        },
+        legend: { display: false },
         tooltip: {
-          mode: 'index',
-          intersect: false,
-          backgroundColor: 'rgba(0, 0, 0, 0.8)',
-          padding: 8,
+          backgroundColor: '#1e293b',
+          padding: 10,
           displayColors: false,
           callbacks: {
-            label: function(context) {
-              return `Altitude: ${context.parsed.y.toFixed(2)} km`;
-            }
+            label: (context) => `${context.parsed.y.toFixed(2)} km`
           }
         }
       },
@@ -246,135 +160,79 @@ function createChart() {
           display: true,
           ticks: {
             maxTicksLimit: 6,
-            color: '#6b7280',
-            font: {
-              size: 10
-            }
+            color: '#64748b',
+            font: { size: 10 }
           },
-          grid: {
-            display: false,
-          }
+          grid: { display: false }
         },
         y: {
           display: true,
           ticks: {
-            color: '#6b7280',
-            font: {
-              size: 10
-            },
-            callback: function(value) {
-              return value.toFixed(0) + 'km';
-            }
+            color: '#64748b',
+            font: { size: 10 },
+            callback: (value) => value.toFixed(0) + ' km'
           },
-          grid: {
-            color: 'rgba(0, 0, 0, 0.05)'
-          },
+          grid: { color: 'rgba(100, 116, 139, 0.1)' }
         }
-      },
-      interaction: {
-        mode: 'nearest',
-        axis: 'x',
-        intersect: false
       }
     }
   });
 }
 
-// Update chart with new data
 function updateChart() {
-  if (!altitudeChart || chartData.value.length === 0) return;
+  if (!altitudeChart) return;
   
-  // Update labels and data
   altitudeChart.data.labels = chartData.value.map(d => d.time.toLocaleTimeString());
   altitudeChart.data.datasets[0].data = chartData.value.map(d => d.altitude);
-  
-  // Smooth update
   altitudeChart.update('active');
 }
 
-// Manual refresh
-async function manualRefresh() {
-  console.log('🔄 Manual refresh triggered');
-  await loadChartData();
-  createChart();
-}
-
 onMounted(async () => {
-  console.log('🎯 AltitudeChart mounted');
   await loadChartData();
-  
   setTimeout(() => {
     createChart();
-    setupRealTimeUpdates();  // Start real-time listener
+    setupRealTimeUpdates();
   }, 100);
 });
 
 onUnmounted(() => {
-  console.log('🗑️ AltitudeChart unmounted');
-  if (unsubscribe) {
-    unsubscribe();
-    console.log('📈 Real-time updates stopped');
-  }
-  
-  if (altitudeChart) {
-    altitudeChart.destroy();
-  }
+  if (unsubscribe) unsubscribe();
+  if (altitudeChart) altitudeChart.destroy();
 });
 </script>
 
 <style scoped>
-.altitude-chart-card {
-  border-radius: 8px;
-  border: 1px solid #e2e8f0;
+.altitude-chart {
   height: 100%;
   display: flex;
   flex-direction: column;
-  background: white;
-  min-height: 0;
-}
-
-.card-title-wrapper {
-  background: #f8fafc;
-  border-bottom: 1px solid #e2e8f0;
-  padding: 0.5rem 0.75rem;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  flex-shrink: 0;
-}
-
-.card-title {
-  margin: 0;
-  font-size: 0.85rem;
-  color: #1e293b;
-  font-weight: 600;
-}
-
-.data-points {
-  font-size: 0.7rem;
-  color: #64748b;
-  background: #f1f5f9;
-  padding: 0.2rem 0.4rem;
-  border-radius: 4px;
+  background: transparent;
+  overflow: hidden;  /* ✅ Added */
 }
 
 .loading {
-  text-align: center;
-  padding: 1rem;
-  color: #64748b;
-  font-size: 0.8rem;
   flex: 1;
   display: flex;
   align-items: center;
   justify-content: center;
+  color: #64748b;
+  font-size: 0.9rem;
 }
 
-.chart-container {
-  padding: 0.5rem;
+.chart-content {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  padding: 0.75rem;  /* ✅ Reduced from 1rem */
+  overflow: hidden;  /* ✅ Added */
+}
+
+.chart-wrapper {
   flex: 1;
-  height: 200px;
-  min-height: 120px;
+  min-height: 0;
+  max-height: calc(100% - 90px);  /* ✅ Reserve space for stats */
   position: relative;
+  overflow: hidden;  /* ✅ Added */
 }
 
 #altitudeChart {
@@ -382,60 +240,60 @@ onUnmounted(() => {
   height: 100% !important;
 }
 
-.chart-stats {
+.stats {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 0.5rem;
-  padding: 0.75rem;
-  background: #f8fafc;
-  border-top: 1px solid #e2e8f0;
-  flex-shrink: 0;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0.5rem;  /* ✅ Reduced from 0.75rem */
+  margin-top: 0.75rem;  /* ✅ Reduced from 1rem */
+  padding-top: 0.75rem;  /* ✅ Reduced from 1rem */
+  border-top: 1px solid rgba(99, 102, 241, 0.15);
+  flex-shrink: 0;  /* ✅ Prevent stats from shrinking */
+  height: 70px;  /* ✅ Fixed height for stats */
 }
 
-.stat-item {
+.stat {
   display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 0.3rem 0;
+  flex-direction: column;
+  gap: 0.2rem;  /* ✅ Reduced from 0.25rem */
+  padding: 0.4rem;  /* ✅ Reduced from 0.5rem */
+  background: rgba(99, 102, 241, 0.05);
+  border: 1px solid rgba(99, 102, 241, 0.1);
+  border-radius: 6px;
 }
 
-.stat-label {
-  font-size: 0.8rem;
+.stat .label {
+  font-size: 0.65rem;  /* ✅ Reduced from 0.7rem */
+  color: #9ca3af;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.stat .value {
+  font-size: 0.95rem;  /* ✅ Reduced from 1rem */
+  color: #60a5fa;
+  font-weight: 700;
+  font-family: 'Courier New', monospace;
+}
+
+.stat .value::after {
+  content: ' km';
+  font-size: 0.65rem;  /* ✅ Reduced from 0.7rem */
   color: #64748b;
   font-weight: 500;
 }
 
-.stat-value {
-  font-size: 0.9rem;
-  color: #3b82f6;
-  font-weight: 600;
-}
-
 @media (max-width: 768px) {
-  .card-title-wrapper {
-    padding: 0.4rem 0.5rem;
-  }
-  
-  .chart-container {
-    padding: 0.3rem;
-    height: 100px;
-    min-height: 100px;
-  }
-  
-  .chart-stats {
-    padding: 0.6rem;
+  .stats {
+    grid-template-columns: repeat(2, 1fr);
     gap: 0.4rem;
+    height: auto;  /* ✅ Auto height on mobile */
   }
   
-  .stat-item {
-    padding: 0.2rem 0;
+  .stat {
+    padding: 0.3rem;
   }
   
-  .stat-label {
-    font-size: 0.75rem;
-  }
-  
-  .stat-value {
+  .stat .value {
     font-size: 0.85rem;
   }
 }
