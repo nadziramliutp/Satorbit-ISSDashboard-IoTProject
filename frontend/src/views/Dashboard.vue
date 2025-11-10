@@ -57,11 +57,11 @@ import Altitude from '@/components/AltitudeChart.vue'
               <span class="member-name">NADZIRA RAMLI</span>
               <span class="member-id">22010431</span>
               <span class="member-name">JASHBINDAR SINGH</span>
-              <span class="member-id">22010432</span>
-              <span class="member-name">NURHUMAIRA</span>
-              <span class="member-id">22010433</span>
+              <span class="member-id">22010355</span>
               <span class="member-name">ETHAN LEE</span>
-              <span class="member-id">22010434</span>
+              <span class="member-id">22010392</span>
+              <span class="member-name">NURHUMAIRA NOORHIDAYAT</span>
+              <span class="member-id">22010451</span>
             </div>
           </div>
         </div>
