@@ -13,7 +13,7 @@ This is a real-time IoT dashboard built with **Vue.js** and **Node.js** that tra
 | Name | Student ID |
 |------|------------|
 | NADZIRA BINTI RAMLI | 22010431 |
-| JASHBINDAR SINGH | 2200355 |
+| JASHBINDAR SINGH | 22010355 |
 | NURHUMAIRA NOORHIDAYAT | 22010451 |
 | ETHAN LEE | 22010392 |
 
