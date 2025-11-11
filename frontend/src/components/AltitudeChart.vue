@@ -72,7 +72,7 @@ async function loadChartData() {
   
   const q = query(
     collection(db, 'iss_location'),
-    orderBy('createdAt', 'asc'),
+    orderBy('createdAt', 'desc'),
     limit(props.dataLimit)
   );
   
