@@ -4,7 +4,7 @@
 
 This is a real-time IoT dashboard built with **Vue.js** and **Node.js** that tracks the International Space Station (ISS) position, collecting telemetry data every 60 seconds and visualizing it on an interactive dashboard with live updates.
 
-🎥 **[Click here for demo on Youtube](#)** *(Add your video link)*
+🎥 **[Click here for demo on Youtube](#)**
 
 ---
 
@@ -13,11 +13,11 @@ This is a real-time IoT dashboard built with **Vue.js** and **Node.js** that tra
 | Name | Student ID |
 |------|------------|
 | NADZIRA BINTI RAMLI | 22010431 |
-| JASHBINDAR SINGH | 2200XXX |
+| JASHBINDAR SINGH | 22010355 |
 | NURHUMAIRA NOORHIDAYAT | 22010451 |
-| ETHAN LEE | 2201XXXX |
+| ETHAN LEE | 22010392 |
 
-**Lecturer:** Dr. [Lecturer Name]
+**Lecturer:** Dr. Ooi Boon Yaik
 
 ---
 
@@ -577,15 +577,6 @@ This project is created for educational purposes as part of **TFB2093 - Internet
 - **WTIA API:** For providing free ISS telemetry data
 - **Firebase:** For cloud infrastructure
 - **Open Source Community:** For amazing libraries and tools
-
----
-
-## 📞 Contact
-
-For questions or issues, please contact:
-
-- **Project Lead:** [Your Name] - [Your Email]
-- **Course Website:** [Course Link if available]
 
 ---
 
