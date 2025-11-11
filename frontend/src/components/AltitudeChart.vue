@@ -94,21 +94,21 @@ function setupRealTimeUpdates() {
   const q = query(
     collection(db, 'iss_location'),
     orderBy('createdAt', 'desc'),
-    limit(1)
+    limit(props.dataLimit) // Get multiple documents based on your limit
   );
   
   unsubscribe = onSnapshot(q, (snapshot) => {
     if (!snapshot.empty) {
-      const newData = snapshot.docs[0].data();
+      // Clear and rebuild the entire array from Firestore
+      chartData.value = [];
       
-      chartData.value.push({
-        time: newData.createdAt ? new Date(newData.createdAt * 1000) : new Date(newData.timestamp * 1000),
-        altitude: newData.altitude
+      snapshot.docs.reverse().forEach((doc) => { // Reverse to get chronological order
+        const data = doc.data();
+        chartData.value.push({
+          time: data.createdAt ? new Date(data.createdAt * 1000) : new Date(data.timestamp * 1000),
+          altitude: data.altitude
+        });
       });
-      
-      if (chartData.value.length > props.dataLimit) {
-        chartData.value.shift();
-      }
       
       updateChart();
     }
