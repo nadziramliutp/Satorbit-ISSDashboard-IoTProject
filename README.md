@@ -4,7 +4,7 @@
 
 This is a real-time IoT dashboard built with **Vue.js** and **Node.js** that tracks the International Space Station (ISS) position, collecting telemetry data every 60 seconds and visualizing it on an interactive dashboard with live updates.
 
-🎥 **[Click here for demo on Youtube](#)** *(Add your video link)*
+🎥 **[Click here for demo on Youtube](#)**
 
 ---
 
@@ -17,7 +17,7 @@ This is a real-time IoT dashboard built with **Vue.js** and **Node.js** that tra
 | NURHUMAIRA NOORHIDAYAT | 22010451 |
 | ETHAN LEE | 22010392 |
 
-**Lecturer:** Dr. [Lecturer Name]
+**Lecturer:** Dr. Ooi Boon Yaik
 
 ---
 
